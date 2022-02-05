@@ -13,12 +13,26 @@ function verifyIfExistsAccountCPF(req, res, next) {
   const customer = customers.find(customer => customer.cpf === cpf);
 
   if ( !customer ) {
-    return res.status(400).json({ error: "Customer not found" });
+    return res.status(400).json({
+      error: "Customer not found"
+    });
   };
 
   req.customer = customer;
 
   return next();
+};
+
+function getBalance(statement) {
+  const balance = statement.reduce((acc, operation) => {
+    if ( operation.type === 'credit' ) {
+      return acc + operation.amount;
+    };
+
+    return acc - operation.amount;
+  }, 0);
+
+  return balance;
 };
 
 app.post("/account", (req, res) => {
@@ -28,7 +42,7 @@ app.post("/account", (req, res) => {
 
   if ( custumerAlreadyExists ) {
     return res.status(400).json({
-      error: "Customer already exists."
+      error: "Customer already exists"
     });
   };
 
@@ -52,14 +66,48 @@ app.get("/statement", verifyIfExistsAccountCPF, (req, res) => {
 
 app.post("/deposit", verifyIfExistsAccountCPF, (req, res) => {
   const { description, amount } = req.body;
-
   const { customer } = req;
+
+  if ( amount <= 0 ) {
+    return res.status(400).json({
+      error: 'Invalid amount'
+    });
+  };
 
   const statementOperation = {
     description,
     amount,
     created_at: new Date(),
     type: "credit"
+  };
+
+  customer.statement.push(statementOperation);
+
+  res.status(201).send();
+});
+
+app.post("/withdraw", verifyIfExistsAccountCPF, (req, res) => {
+  const { amount } = req.body;
+  const { customer } = req;
+
+  if ( amount <= 0 ) {
+    return res.status(400).json({
+      error: 'Invalid amount'
+    });
+  };
+
+  const balance = getBalance(customer.statement);
+
+  if ( balance < amount ) {
+    return res.status(400).json({
+      error: 'Insufficient funds'
+    });
+  };
+
+  const statementOperation = {
+    amount,
+    created_at: new Date(),
+    type: "debit"
   };
 
   customer.statement.push(statementOperation);
